@@ -52,77 +52,66 @@ int pop[popsize][GL];           //  Population of command strings
 bitspray *bPop[popsize];
 double fit[popsize];            //  Fitness array
 int dx[popsize];                //  Sorting index
-double PD[PL + 1];               //  Profile dictionary
+double PD[PL + 1];              //  Profile dictionary
 double CmD[NmC];                //  Command densities
-int mode;                       //  Profile?
+bool profiles;
 bool ringG;
+bool variants;
 graph iG;
 
 /****************************Procedures********************************/
-void initalg(const char *pLoc);         //initialize the algorithm
-int validloci();                       //generate an acceptable large integer
+void initalg(const char *pLoc);           //initialize the algorithm
+int validloci();                          //generate an acceptable large integer
 int validloci(int &psn);
-
-void express(graph &G, const int *cmd);       //express a command string
-void initpop();                        //initialize population
-void matingevent();                    //run a mating event
-void report(ostream &aus);             //make a statistical report
+void express(graph &G, const int *cmd);   //express a command string
+void initpop();                           //initialize population
+void matingevent();                       //run a mating event
+void report(ostream &aus);                //make a statistical report
 void reportbest(ostream &aus, ostream &difc);
-
 void createReadMe(ostream &aus);
-
 void cmdLineIntro(ostream &aus);
-
 void cmdLineRun(int run, ostream &aus);
-
 double fitness(int *cmd);
-
 double fitness(int idx, bitspray &A);
-
 void developQ(bitspray &A);
-
 bool getnum(int &val, int bits, int &psn);
-
 void getGene(int idx, double *probs);
 
 /****************************Main Routine*******************************/
 int main(int argc, char *argv[]) {
-    /**
-     * Output Root, Profile Location, Profile Number
-     */
+  /**
+   * Output Root, Profile Location, Profile Number
+   */
 
-    mode = 0;   //  0 -> Epidemic Length; 1, 2 -> Profile Matching
-    ringG = false;  //  Ring graph or power law cluster
-    /*
-     * Mode 0 -> Epidemic Length (w Densities)
-     * Mode 1 -> Profile Matching (w Densities)
-     * Mode 2 -> Profile Matching (w Bitsprayers)
-     */
+  profiles = false;   //  F -> Epidemic Length; T -> Profile Matching
+  ringG = false;  //  Ring graph or power law cluster
+  variants = false;   //  With or without variants
 
-    fstream stat, best, dchar, readme, iGOut;   //statistics, best structures
-    char fn[60];          //file name construction buffer
-    char *outLoc = new char[45];
-    char *outRoot = argv[1];
-    char *pLoc = argv[2];
-    int pNum = stoi(argv[3]);
-    sprintf(outLoc, "%sOutput - P%d w %dS, %02dP, %dM/",
+  fstream stat, best, dchar, readme, iGOut;   //statistics, best structures
+  char fn[60];          //file name construction buffer
+  char *outLoc = new char[45];
+  char *outRoot = argv[1];
+  char *pLoc = argv[2];
+  int pNum = stoi(argv[3]);
+
+  // Create directory for output
+  if (profiles) {
+    sprintf(outLoc, "%sOutput - Profile%d w %dS, %02dP, %dM/",
             outRoot, pNum, states, popsize, MNM);
-    std::filesystem::create_directory(outLoc);
+  } else {
+    sprintf(outLoc, "%sOutput - Length w %dS, %02dP, %dM/",
+            outRoot, states, popsize, MNM);
+  }
+  std::filesystem::create_directory(outLoc);
 
-    initalg(pLoc);
-    if (mode < 2) { // Densities
-        int offset = 4;
-        for (int cmd = 0; cmd < NmC; cmd++) {
-            CmD[cmd] = strtod(argv[cmd + offset], nullptr);
-        }
-    }
+  initalg(pLoc);
 
-    sprintf(fn, "%sbest.lint", outLoc);
-    best.open(fn, ios::out);
-    sprintf(fn, "%sdifc.dat", outLoc);
-    dchar.open(fn, ios::out);
-    sprintf(fn, "%sreadme.dat", outLoc);
-    readme.open(fn, ios::out);
+  sprintf(fn, "%sbest.lint", outLoc);
+  best.open(fn, ios::out);
+  sprintf(fn, "%sdifc.dat", outLoc);
+  dchar.open(fn, ios::out);
+  sprintf(fn, "%sreadme.dat", outLoc);
+  readme.open(fn, ios::out);
     createReadMe(readme);
     readme.close();
     if (!ringG) {
@@ -134,7 +123,6 @@ int main(int argc, char *argv[]) {
     if (verbose) {
         cmdLineIntro(cout);
     }
-
     if (!verbose) {
         cout << "Started" << endl;
     }
@@ -164,139 +152,101 @@ int main(int argc, char *argv[]) {
 }
 
 void createReadMe(ostream &aus) {
-    aus << "This file contains the info about the files in this folder."
+  aus << "This file contains the info about the files in this folder."
+      << endl;
+  aus << "Graph Evolution Tool." << endl;
+
+  aus << "Initial Graph: ";
+  if (ringG) {
+    aus << "Ring with m = 2" << endl;
+  } else {
+    aus << "Power Law Cluster Graph" << endl;
+  }
+
+  aus << "Fitness Function: ";
+  if (profiles) {
+    aus << "Profile Matching" << endl;
+    aus << "Profile: ";
+    for (double i: PD) {
+      aus << i << " ";
+    }
+    aus << endl;
+  } else {
+    aus << "Epidemic Length" << endl;
+  }
+
+  aus << "Epidemic Model Used: ";
+  if (variants) {
+    aus << "SIR with Variants" << endl;
+  } else {
+    aus << "SIR" << endl;
+  }
+
+  aus << "Representation: Bitsprayers on Adjacency Matrix" << endl;
+  aus << endl;
+  aus << "The parameter settings are as follows: " << endl;
+  aus << "Number of sample epidemics: " << NSE << endl;
+  aus << "Alpha: " << alpha << endl;
+  aus << "Minimum epidemic length: " << mepl << endl;
+  aus << "Re-tries for short epidemics: " << rse << endl;
+  aus << "Runs: " << runs << endl;
+  aus << "Mating events: " << mevs << endl;
+  aus << "Minimum degree for swap: " << EDGB << endl;
+  aus << "Population size: " << popsize << endl;
+  aus << "Number of vertices: " << verts << endl;
+  aus << "Maximum number of mutations: " << MNM << endl;
+  aus << "Tournament size: " << tsize << endl;
+  aus << "Number of States: " << states << endl;
+//    aus << "Entropy Threshold for Necrotic Filter: " << ent_thres << endl;
+  aus << "Decay strength for diffusion characters: " << omega << endl;
+  if (!ringG) {
+    aus << "Omega value: " << omega << endl;
+    aus << "Edges added at each step: " << edgeAdd << endl;
+    aus << "Triangle creation probability: " << triProb << endl;
+  }
+  aus << endl;
+  aus << "The file descriptions are as follows: " << endl;
+  aus << "best.lint -> the best fitness and it's associated data for each "
+         "run" << endl;
+  aus << "difc.dat -> the diffusion characters of the best graph for each "
+         "run" << endl;
+  aus << "run##.dat -> population statistics for each run" << endl;
+  if (!ringG) {
+    aus << "initGraph.dat -> the initial power law clustering graph"
         << endl;
-    aus << "Graph Evolution Tool." << endl;
-    aus << "Initial Graph: ";
-    if (ringG) {
-        aus << "Ring with m = 2" << endl;
-    } else {
-        aus << "Power Law Cluster Graph" << endl;
-    }
-    switch (mode) {
-        case 0:
-            aus << "Fitness Function: Epidemic Length" << endl;
-            aus << "Representation: THADS-N with Operation Densities" << endl;
-            aus << "Gene length: " << GL << endl;
-            aus << "Densities: ";
-            for (double i: CmD) {
-                aus << i << " ";
-            }
-            aus << endl;
-            break;
-        case 1:
-            aus << "Fitness Function: Profile Matching" << endl;
-            aus << "Representation: THADS-N with Operation Densities" << endl;
-            aus << "Gene length: " << GL << endl;
-            aus << "Densities: ";
-            for (double i: CmD) {
-                aus << i << " ";
-            }
-            aus << endl;
-            aus << "Profile: ";
-            for (double i: PD) {
-                aus << i << " ";
-            }
-            aus << endl;
-            break;
-        case 2:
-            aus << "Fitness Function: Profile Matching" << endl;
-            aus << "Representation: THADS-N with Self-Driving Automata" << endl;
-            aus << "Gene length: " << GL << endl;
-            aus << "Profile: ";
-            for (double i: PD) {
-                aus << i << " ";
-            }
-            aus << endl;
-            break;
-        default:
-            break;
-    }
-    aus << endl;
-    aus << "The parameter settings are as follows: " << endl;
-    aus << "Number of sample epidemics: " << NSE << endl;
-    aus << "Alpha: " << alpha << endl;
-    aus << "Minimum epidemic length: " << mepl << endl;
-    aus << "Re-tries for short epidemics: " << rse << endl;
-    aus << "Runs: " << runs << endl;
-    aus << "Mating events: " << mevs << endl;
-    aus << "Minimum degree for swap: " << EDGB << endl;
-    aus << "Population size: " << popsize << endl;
-    aus << "Number of vertices: " << verts << endl;
-    aus << "Maximum number of mutations: " << MNM << endl;
-    aus << "Tournament size: " << tsize << endl;
-    if (mode > 1) {
-        aus << "Number of States: " << states << endl;
-        aus << "Entropy Threshold for Necrotic Filter: " << ent_thres << endl;
-    }
-    aus << "Decay strength for diffusion characters: " << omega << endl;
-    if (!ringG) {
-        aus << "Omega value: " << omega << endl;
-        aus << "Edges added at each step: " << edgeAdd << endl;
-        aus << "Triangle creation probability: " << triProb << endl;
-    }
-    aus << endl;
-    aus << "The file descriptions are as follows: " << endl;
-    aus
-        << "best.lint -> the best fitness and it's associated data for each run";
-    aus << endl;
-    aus
-        << "difc.dat -> the diffusion characters of the best graph for each run";
-    aus << endl;
-    aus << "run##.dat -> population statistics for each run" << endl;
-    if (!ringG) {
-        aus << "initGraph.dat -> the initial power law clustering graph"
-            << endl;
-    }
+  }
 }
 
 void cmdLineIntro(ostream &aus) {
-    aus << "Graph Evolution Tool." << endl;
-    aus << "Initial Graph: ";
-    if (ringG) {
-        aus << "Ring with m = 2" << endl;
-    } else {
-        aus << "Power Law Cluster Graph" << endl;
+  aus << "Graph Evolution Tool." << endl;
+  aus << "Initial Graph: ";
+  if (ringG) {
+    aus << "Ring with m = 2" << endl;
+  } else {
+    aus << "Power Law Cluster Graph" << endl;
+  }
+
+  aus << "Fitness Function: ";
+  if (profiles) {
+    aus << "Profile Matching" << endl;
+    aus << "Profile: ";
+    for (double i: PD) {
+      aus << i << " ";
     }
-    switch (mode) {
-        case 0:
-            aus << "Fitness Function: Epidemic Length" << endl;
-            aus << "Representation: THADS-N with Operation Densities" << endl;
-            aus << "Densities: ";
-            for (double i: CmD) {
-                aus << i << " ";
-            }
-            aus << endl;
-            break;
-        case 1:
-            aus << "Fitness Function: Profile Matching" << endl;
-            aus << "Representation: THADS-N with Operation Densities" << endl;
-            aus << "Densities: ";
-            for (double i: CmD) {
-                aus << i << " ";
-            }
-            aus << endl;
-            aus << "Profile: ";
-            for (double i: PD) {
-                aus << i << " ";
-            }
-            aus << endl;
-            break;
-        case 2:
-            aus << "Fitness Function: Profile Matching" << endl;
-            aus << "Representation: THADS-N with Self-Driving Automata" << endl;
-            aus << "Gene length: " << GL << endl;
-            aus << "Profile: ";
-            for (double i: PD) {
-                aus << i << " ";
-            }
-            aus << endl;
-            break;
-        default:
-            break;
-    }
-    aus << "Check readme.dat for more information about parameters/output.";
     aus << endl;
+  } else {
+    aus << "Epidemic Length" << endl;
+  }
+
+  aus << "Epidemic Model Used: ";
+  if (variants) {
+    aus << "SIR with Variants" << endl;
+  } else {
+    aus << "SIR" << endl;
+  }
+  aus << "Representation: Bitsprayers on Adjacency Matrix" << endl;
+  aus << "Check readme.dat for more information about parameters/output.";
+  aus << endl;
 }
 
 void cmdLineRun(int run, ostream &aus) {
@@ -317,27 +267,25 @@ void initalg(const char *pLoc) {//initialize the algorithm
     char buf[20];   //input buffer
 
     srand48(RNS);                 //read the random number seed
-    if (!ringG) {
-        iG.create(verts);
-        iG.PCG(verts, edgeAdd, triProb);
+  if (!ringG) {
+    iG.create(verts);
+    iG.PCG(verts, edgeAdd, triProb);
+  }
+  if (profiles) {
+    inp.open(pLoc, ios::in);      //open input file
+    for (int i = 0; i < PL; i++) {
+      PD[i] = 0;  //pre-fill missing values
     }
-    if (mode > 0) {
-        inp.open(pLoc, ios::in);      //open input file
-        for (int i = 0; i < PL; i++) {
-            PD[i] = 0;  //pre-fill missing values
-        }
-        PD[0] = 1;  //put in patient zero
-        for (int i = 0; i < PL; i++) {      //loop over input values
-            inp.getline(buf, 19);  //read in the number
-            PD[i + 1] = strtod(buf, nullptr);    //translate the number
-        }
-        inp.close();
+    PD[0] = 1;  //put in patient zero
+    for (int i = 0; i < PL; i++) {      //loop over input values
+      inp.getline(buf, 19);  //read in the number
+      PD[i + 1] = strtod(buf, nullptr);    //translate the number
     }
-    if (mode == 2) {
-        for (auto &i: bPop) {
-            i = new bitspray(states);
-        }
-    }
+    inp.close();
+  }
+  for (auto &i: bPop) {
+    i = new bitspray(states);
+  }
 }
 
 //This routine generates valid loci for the expression routine
@@ -550,22 +498,22 @@ bool getnum(int &val, int bits, int &psn) {//get a number from the queue
 }
 
 double fitness(int idx, bitspray &A) {
-    int psn = 0;
+  int psn = 0;
 
-    developQ(A);
-    if (necroticFilter()) {
-        dead[idx] = true;
-        return max_fit;
-    }
-    for (int &i: pop[idx]) {
-        i = validloci(psn);
-        if (i == -1) {
-            dead[idx] = true;
-            return max_fit;
-        }
-    }
-    double fi = fitness(pop[idx]);
-    return fi;
+  developQ(A);
+//    if (necroticFilter()) {
+//        dead[idx] = true;
+//        return max_fit;
+//    }
+//    for (int &i: pop[idx]) {
+//        i = validloci(psn);
+//        if (i == -1) {
+//            dead[idx] = true;
+//            return max_fit;
+//        }
+//    }
+  double fi = fitness(pop[idx]);
+  return fi;
 }
 
 void getGene(int idx, double *probs) {
@@ -582,22 +530,12 @@ void getGene(int idx, double *probs) {
 }
 
 void initpop() {//initialize population
-    if (mode < 2) {
-        for (int i = 0; i < popsize; i++) {    //loop over the population
-            for (int j = 0; j < GL; j++) {
-                pop[i][j] = validloci(); //fill in the loci
-            }
-            fit[i] = fitness(pop[i]);  //compute its fitness
-            dx[i] = i;                 //refresh the sorting index
-        }
-    } else {
-        for (int i = 0; i < popsize; i++) {
-            dead[i] = false;
-            bPop[i]->randomize();
-            fit[i] = fitness(i, *bPop[i]);
-            dx[i] = i;
-        }
-    }
+  for (int i = 0; i < popsize; i++) {
+    dead[i] = false;
+    bPop[i]->randomize();
+    fit[i] = fitness(i, *bPop[i]);
+    dx[i] = i;
+  }
 }
 
 void matingevent() {//run a mating event
