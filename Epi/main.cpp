@@ -128,14 +128,14 @@ int main(int argc, char *argv[]) {
 
     // Create directory for output
     if (mde_prof) {
-        sprintf(outLoc, "%sOutput - Profile%d w %dS, %02dP, %dM/",
+        sprintf(outLoc, "%sOutput - Profile%d %dS, %02dP, %dM/",
                 outRoot, pNum, states, popsize, MNM);
     } else if (mde_var) {
         if (mde_spread) {
             sprintf(outLoc, "%sOutput - ES %.4fP and %02d to %02dE/",
                     outRoot, var_prob, edit_lowB, edit_upB);
         } else {
-            sprintf(outLoc, "%sOutput - EL w %.4fP and %02d to %02dE/",
+            sprintf(outLoc, "%sOutput - EL %.4fP and %02d to %02dE/",
                     outRoot, var_prob, edit_lowB, edit_upB);
         }
     } else {
