@@ -10,6 +10,7 @@
 //  MacOS/Windows
 #include <sys/stat.h>
 #include <bitset>
+#include <numeric>
 
 using namespace std;
 
@@ -83,6 +84,7 @@ void createUpTri(bitspray &A, int *upTri);
 int main(int argc, char *argv[]) {
     /**
      * Output Root, modeV, vProb, editLow, editUp, modeS, modeP
+     * nohup ./THADSNBit "./Output/" 1 0.01 4 12 0 0 &
      */
 
     fstream stat, best, dchar, readme, iGOut;   //statistics, best structures
@@ -98,15 +100,17 @@ int main(int argc, char *argv[]) {
     edit_lowB = (int) strtol(argv[4], nullptr, 10);
     edit_upB = (int) strtol(argv[5], nullptr, 10);
     //  F -> Epidemic Length; T -> Epidemic Spread
-    mde_spread = (int) strtol(argv[4], nullptr, 10) == 1;
+    mde_spread = (int) strtol(argv[6], nullptr, 10) == 1;
     //  F -> Epidemic Length; T -> Profile Matching
-    mde_prof = (int) strtol(argv[4], nullptr, 10) == 1;
+    mde_prof = (int) strtol(argv[7], nullptr, 10) == 1;
 
     if (!mde_var) {
         if (mde_prof) { // Profile matching without mde_var
             fitFun = 1;
-        } else { // Epidemic length without mde_var
-            fitFun = 0;
+        } else if (mde_spread) {
+            fitFun = 2; // Epidemic mde_spread with mde_var
+        } else {
+            fitFun = 0; // Epidemic length without mde_var
         }
     } else {
         if (mde_spread) {
@@ -128,10 +132,10 @@ int main(int argc, char *argv[]) {
                 outRoot, pNum, states, popsize, MNM);
     } else if (mde_var) {
         if (mde_spread) {
-            sprintf(outLoc, "%sOutput - ES %.2fP and %02d to %02dE/",
+            sprintf(outLoc, "%sOutput - ES %.4fP and %02d to %02dE/",
                     outRoot, var_prob, edit_lowB, edit_upB);
         } else {
-            sprintf(outLoc, "%sOutput - EL w %.2fP and %02d to %02dE/",
+            sprintf(outLoc, "%sOutput - EL w %.4fP and %02d to %02dE/",
                     outRoot, var_prob, edit_lowB, edit_upB);
         }
     } else {
@@ -311,6 +315,11 @@ bool necroticFilter(const int *upTri) {
     int len = Qz - 2;
     int count[2] = {0, 0};
     int bounds[2] = {1 * verts, 6 * verts};
+    if (fitFun == 2) {
+        bounds[0] = 1 * verts;
+        bounds[1] = 2.5 * verts;
+    }
+
     for (int i = 0; i < len; i++) {
         count[upTri[i]]++;
     }
@@ -363,8 +372,11 @@ double fitness(int *upTri, int idx, bool final) {//compute the fitness
     vector<double> v_lengths;
     v_lengths.clear();
     v_lengths.reserve(NSE);
+    vector<double> v_spreads;
+    v_spreads.clear();
+    v_spreads.reserve(NSE);
 
-    if (fitFun == 0 || fitFun == 2) { //  Epidemic length
+    if (fitFun == 0) { //  Epidemic length
         for (en = 0; en < (final ? 10 * NSE : NSE); en++) {
             cnt = 0;
             do {
@@ -435,15 +447,62 @@ double fitness(int *upTri, int idx, bool final) {//compute the fitness
             }
             trials[en] = sqrt(trials[en] / len); //convert to RMS error
         }
-        //TODO: Write mde_spread
-//        else { //  Epidemic mde_spread
-//
-//        }
-
-        for (double trial: trials) {
-            accu += trial;
+    } else { //  Epidemic mde_spread
+        for (en = 0; en < (final ? 10 * NSE : NSE); en++) {
+            cnt = 0;
+            do {
+                if (!mde_var) {
+                    G.SIR(0, max, len, ttl, alpha, varBaseProf);
+                } else {
+                    G.varSIR(0, var_count, var_profs, variants,
+                             var_parents, var_lens, 0.5,
+                             edit_lowB, edit_upB, var_prob);
+                    v_lengths.clear();
+                    ttl = 0;
+                    for (int i = 0; i <= var_count; i++) {
+                        v_lengths.push_back((double) (var_lens[i].second));
+                        ttl += accumulate(var_profs[i].begin(), var_profs[i].end(), 0);
+                    }
+                    sort(v_lengths.begin(), v_lengths.end());
+                    len = (int) v_lengths.at(var_count);
+                }
+                cnt++;
+            } while (len < mepl && cnt < rse);
+            if (final) {
+                if (!mde_var) {
+                    if (ttl > best_epi) {
+                        best_epi = ttl;
+                        best_varC = 0;
+                        best_varL[0].first = 0;
+                        best_varL[0].second = len;
+                        best_varP[0] = varBaseProf;
+                    }
+                } else {
+                    if (ttl > best_epi) {
+                        best_epi = ttl;
+                        for (int i = 0; i < max_vars; i++) {
+                            best_varC = var_count;
+                            best_varL[i] = var_lens[i];
+                            best_varP[i] = var_profs[i];
+                        }
+                    }
+                }
+                accu = -1;
+            } else {
+                trials[en] = ttl;
+            }
         }
-        accu = accu / NSE;
+        if (!final) {
+            int furthest = 0;
+            for (double trial: trials) {//loop over trials
+                if (trial > furthest) {
+                    furthest = (int) trial;
+                }
+                accu += trial;
+            }
+            accu = accu / NSE;
+            b_epi[idx] = furthest;
+        }
     }
     return accu;  //return the fitness value
 }
@@ -685,7 +744,7 @@ void reportbest(ostream &aus, ostream &difc) {//report the best graph
             for (int j = 0; j < best_varL[i].first; j++) {
                 aus << "   ";
             }
-            for (int j = 0; j < best_varL[i].second - best_varL[i].first; j++) {
+            for (int j = 0; j <= best_varL[i].second - best_varL[i].first; j++) {
                 aus << left << setw(3) << best_varP[i].at(j);
             }
             aus << endl;
@@ -694,7 +753,7 @@ void reportbest(ostream &aus, ostream &difc) {//report the best graph
         aus << "V0" << " ";
         aus << "[" << left << setw(2) << best_varL[0].first << " ";
         aus << best_varL[0].second << "]: ";
-        for (int j = 0; j < best_varL[0].second - best_varL[0].first; j++) {
+        for (int j = 0; j <= best_varL[0].second - best_varL[0].first; j++) {
             aus << left << setw(3) << best_varP[0].at(j) << " ";
         }
         aus << endl;
@@ -709,7 +768,6 @@ void reportbest(ostream &aus, ostream &difc) {//report the best graph
     aus << "Graph" << endl;
     G.write(aus);
     aus << endl;
-
 
     for (int i = 0; i < G.size(); i++) {
         G.DiffChar(i, omega, M[i]);

@@ -200,14 +200,9 @@ class graph {
    * of people infected, length of epidemic, total number infected.
    * The parameter alpha is the probability of passing an infection
    */
-  void SIR(int p0, int &max, int &len, int &ttl, double alpha,
-           vector<int> &prof); //SIR method
-  void SIRProfile(int p0, int &max, int &len, int &ttl, double alpha,
-                  double *prof); //Sir Method, with profile
-  void varSIR(int p0, int &vcnt, vector<int> vprofs[],
-              bitset<dna_len> variants[],
-              int *vorigs, pair<int, int> vtimes[], double alpha,
-              int lB, int uB, double var_prob);
+  void SIR(int p0, int &max, int &len, int &ttl, double alpha, vector<int> &prof); //SIR method
+  void SIRProfile(int p0, int &max, int &len, int &ttl, double alpha, double *prof); //Sir Method, with profile
+  void varSIR(int p0, int &vcnt, vector<int> vprofs[], bitset<dna_len> variants[], int *vorigs, pair<int, int> vtimes[], double alpha, int lB, int uB, double var_prob);
 
   /*SIRr is the same as SIR except that patient zero is assigned at random*/
   void SIRr(int &max, int &len, int &ttl, double alpha); //SIR method
