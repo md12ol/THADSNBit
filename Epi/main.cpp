@@ -75,8 +75,8 @@ void reportbest(ostream &aus, ostream &difc);
 void createReadMe(ostream &aus);
 void cmdLineIntro(ostream &aus);
 void cmdLineRun(int run, ostream &aus);
-double fitness(int *upTri, int idx);
-double fitness(int idx, bitspray &A);
+double fitness(int *upTri, int idx, bool final);
+double fitness(int idx, bitspray &A, bool final);
 void createUpTri(bitspray &A, int *upTri);
 
 /****************************Main Routine*******************************/
@@ -233,7 +233,7 @@ void createReadMe(ostream &aus) {
     aus << "Number of States: " << states << endl;
 //    aus << "Entropy Threshold for Necrotic Filter: " << ent_thres << endl;
     aus << "Decay strength for diffusion characters: " << omega << endl;
-    aus << "Variant Probability" << var_prob << endl;
+    aus << "Variant Probability: " << var_prob << endl;
     aus << "Edit Range: " << edit_lowB << "-" << edit_upB << endl;
     aus << endl;
     aus << "The file descriptions are as follows: " << endl;
@@ -343,7 +343,7 @@ bool necroticFilter(const int *upTri) {
 //    return En < ent_thres;
 }
 
-double fitness(int *upTri, int idx) {//compute the fitness
+double fitness(int *upTri, int idx, bool final) {//compute the fitness
     graph G(verts);      //scratch graph
     G.UTAM(upTri);
     int max, len, ttl;   //maximum, length, and total removed
@@ -353,6 +353,7 @@ double fitness(int *upTri, int idx) {//compute the fitness
     int en;              //epidemic number
     double delta;        //difference between profile and trial
     double accu = 0.0;         //accumulator
+    int best_epi = 0;
     vector<int> varBaseProf;
     var_count = 0;
     pair<int, int> var_lens[max_vars];
@@ -364,17 +365,12 @@ double fitness(int *upTri, int idx) {//compute the fitness
     v_lengths.reserve(NSE);
 
     if (fitFun == 0 || fitFun == 2) { //  Epidemic length
-        for (en = 0; en < NSE; en++) {
+        for (en = 0; en < (final ? 10 * NSE : NSE); en++) {
             cnt = 0;
             do {
                 if (!mde_var) {
                     G.SIR(0, max, len, ttl, alpha, varBaseProf);
-                    best_varC = 0;
-                    best_varL[0].first = 0;
-                    best_varL[0].second = len;
-                    best_varP[0] = varBaseProf;
                 } else {
-                    max = 0;
                     G.varSIR(0, var_count, var_profs, variants,
                              var_parents, var_lens, 0.5,
                              edit_lowB, edit_upB, var_prob);
@@ -384,8 +380,21 @@ double fitness(int *upTri, int idx) {//compute the fitness
                     }
                     sort(v_lengths.begin(), v_lengths.end());
                     len = (int) v_lengths.at(var_count);
-                    if (len > max) {
-                        max = len;
+                }
+                cnt++;
+            } while (len < mepl && cnt < rse);
+            if (final) {
+                if (!mde_var) {
+                    if (len > best_epi) {
+                        best_epi = len;
+                        best_varC = 0;
+                        best_varL[0].first = 0;
+                        best_varL[0].second = len;
+                        best_varP[0] = varBaseProf;
+                    }
+                } else {
+                    if (len > best_epi) {
+                        best_epi = len;
                         for (int i = 0; i < max_vars; i++) {
                             best_varC = var_count;
                             best_varL[i] = var_lens[i];
@@ -393,19 +402,22 @@ double fitness(int *upTri, int idx) {//compute the fitness
                         }
                     }
                 }
-                cnt++;
-            } while (len < mepl && cnt < rse);
-            trials[en] = len;
-        }
-        int longest = 0;
-        for (double trial: trials) {//loop over trials
-            if (trial > longest) {
-                longest = (int) trial;
+                accu = -1;
+            } else {
+                trials[en] = len;
             }
-            accu += trial;
         }
-        accu = accu / NSE;
-        b_epi[idx] = longest;
+        if (!final) {
+            int longest = 0;
+            for (double trial: trials) {//loop over trials
+                if (trial > longest) {
+                    longest = (int) trial;
+                }
+                accu += trial;
+            }
+            accu = accu / NSE;
+            b_epi[idx] = longest;
+        }
     } else if (fitFun == 1) { //  Profile matching
         for (en = 0; en < NSE; en++) {//loop over epidemics
             cnt = 0;
@@ -452,7 +464,7 @@ void createUpTri(bitspray &A, int *upTri) {//unpack the queue
     }
 }
 
-double fitness(int idx, bitspray &A) {
+double fitness(int idx, bitspray &A, bool final) {
     createUpTri(A, pop[idx]);
     if (necroticFilter(pop[idx])) {
         dead[idx] = true;
@@ -462,7 +474,7 @@ double fitness(int idx, bitspray &A) {
             return max_fit;
         }
     }
-    double fi = fitness(pop[idx], idx);
+    double fi = fitness(pop[idx], idx, final);
     return fi;
 }
 
@@ -485,7 +497,7 @@ void initpop() {//initialize population
 //        graph G(verts);
 //        G.UTAM(pop[i]);
 //        G.write(cout);
-        fit[i] = fitness(i, *bPop[i]);
+        fit[i] = fitness(i, *bPop[i], false);
 //        cout<<fit[i]<<endl;
         dx[i] = i;
     }
@@ -526,8 +538,8 @@ void matingevent() {//run a mating event
     // reset dead SDAs
     dead[dx[0]] = false;
     dead[dx[1]] = false;
-    fit[dx[0]] = fitness(dx[0], *bPop[dx[0]]);
-    fit[dx[1]] = fitness(dx[1], *bPop[dx[1]]);
+    fit[dx[0]] = fitness(dx[0], *bPop[dx[0]], false);
+    fit[dx[1]] = fitness(dx[1], *bPop[dx[1]], false);
 }
 
 void culling() {
@@ -537,7 +549,7 @@ void culling() {
                 bPop[i]->randomize();
                 createUpTri(*bPop[i], pop[i]);
             } while (necroticFilter(pop[i]));
-            fit[i] = fitness(i, *bPop[i]);
+            fit[i] = fitness(i, *bPop[i], false);
             min_fit = fit[0];
             dead[i] = false;
         }
@@ -664,28 +676,28 @@ void reportbest(ostream &aus, ostream &difc) {//report the best graph
     //output the fitness and the associated data
     aus << fit[b] << " -fitness" << endl;
 
-    fitness(b, *bPop[b]);
+    fitness(b, *bPop[b], true);
     if (mde_var) {
         for (int i = 0; i <= best_varC; i++) {
-            cout << "V" << i << " ";
-            cout << "[" << best_varL[i].first << " ";
-            cout << best_varL[i].second << "]: ";
+            aus << "V" << i << " ";
+            aus << "[" << left << setw(2) << best_varL[i].first << " ";
+            aus << left << setw(2) << best_varL[i].second << "]: ";
             for (int j = 0; j < best_varL[i].first; j++) {
-                cout << "  ";
+                aus << "   ";
             }
             for (int j = 0; j < best_varL[i].second - best_varL[i].first; j++) {
-                cout << best_varP[i].at(j) << " ";
+                aus << left << setw(3) << best_varP[i].at(j);
             }
-            cout << endl;
+            aus << endl;
         }
     } else {
-        cout << "V0" << " ";
-        cout << "[" << best_varL[0].first << " ";
-        cout << best_varL[0].second << "]: ";
+        aus << "V0" << " ";
+        aus << "[" << left << setw(2) << best_varL[0].first << " ";
+        aus << best_varL[0].second << "]: ";
         for (int j = 0; j < best_varL[0].second - best_varL[0].first; j++) {
-            cout << best_varP[0].at(j) << " ";
+            aus << left << setw(3) << best_varP[0].at(j) << " ";
         }
-        cout << endl;
+        aus << endl;
     }
 
     // Write the SDA
