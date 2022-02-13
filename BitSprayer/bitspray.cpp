@@ -77,15 +77,15 @@ void bitspray::copy(bitspray &other) {//copy routine
   cs = other.cs;          //copy the current state
 //  hd = other.hd;          //copy the head
 //  tl = other.tl;          //copy the tail
-  trans = new int *[St];  //allocate the spine of the transitions
+//  trans = new int *[St];  //allocate the spine of the transitions
   for (int i = 0; i < St; i++) {//loop over states
-    trans[i] = new int[2];  //alocate binary transitions
+//    trans[i] = new int[2];  //alocate binary transitions
     trans[i][0] = other.trans[i][0];  //copy zero transition
     trans[i][1] = other.trans[i][1];  //copy one transition
   }
-  resp = new int *[St];   //allocate spine of responses
+//  resp = new int *[St];   //allocate spine of responses
   for (int i = 0; i < St; i++) {//loop over responses
-    resp[i] = new int[3]; //allocate Nb1b2 registers
+//    resp[i] = new int[3]; //allocate Nb1b2 registers
     resp[i][0] = other.resp[i][0];  //copy
     resp[i][1] = other.resp[i][1];  //the
     resp[i][2] = other.resp[i][2];  //response

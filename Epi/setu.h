@@ -5,10 +5,18 @@
 #ifndef    _SETU_H
 #define    _SETU_H
 
+#include <vector>
+
 using namespace std;
 
 //The is the number of new vertices created when a set enlarges
 #define SETINCR 10
+
+#define dna_len (int)128
+#define init_bits (int)32
+// TODO: Update below?
+#define max_vars (int)32
+#define max_len (int)80
 
 //fitness proportional selector used in simulations
 int rselect(double *v, double ttl, int N);
@@ -104,6 +112,12 @@ class graph {
   double RetrieveW(int num, int dex);        //return Q[num][dex]
 
   int infected(int n, double alpha); //SIR utility routine
+  void varInfected(bitset<dna_len> &immunity,
+                   vector<pair<int, bitset<dna_len>>> &strains,
+                   double alpha, int &str_id);
+  static void create_new_variant(bitset<dna_len> &orig,
+                                 bitset<dna_len> &variant, vector<int> rv,
+                                 int low_bnd, int up_bnd);
 
   //initializers
   void empty(int n);            //empty graph
@@ -186,9 +200,14 @@ class graph {
    * of people infected, length of epidemic, total number infected.
    * The parameter alpha is the probability of passing an infection
    */
-  void SIR(int p0, int &max, int &len, int &ttl, double alpha); //SIR method
+  void SIR(int p0, int &max, int &len, int &ttl, double alpha,
+           vector<int> &prof); //SIR method
   void SIRProfile(int p0, int &max, int &len, int &ttl, double alpha,
                   double *prof); //Sir Method, with profile
+  void varSIR(int p0, int &vcnt, vector<int> vprofs[],
+              bitset<dna_len> variants[],
+              int *vorigs, pair<int, int> vtimes[], double alpha,
+              int lB, int uB, double var_prob);
 
   /*SIRr is the same as SIR except that patient zero is assigned at random*/
   void SIRr(int &max, int &len, int &ttl, double alpha); //SIR method

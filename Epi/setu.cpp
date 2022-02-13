@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <random>
 #include <vector>
 #include <cstdio>
 #include <cstdlib>
@@ -7,11 +8,16 @@
 #include <cctype>
 #include <cmath>
 #include <ctime>
+#include <algorithm>
+#include <random>
+#include <chrono>
+#include <bitset>
 
 using namespace std;
 
 #include "setu.h"
 
+bool infected(unsigned long size, double alpha);
 //fitness proportional selector used in simulations
 int rselect(double *v, double ttl, int N) {
 
@@ -689,6 +695,7 @@ void graph::UTAM(int *ed) {//initialize from an upper triangular adj. matrix
     int i, j, k;  //loop index variables
 
     clearE();
+    V = M;
     k = 0;
     for (i = 0; i < V - 1; i++)
         for (j = i + 1; j < V; j++) {
@@ -1602,6 +1609,7 @@ int graph::RetrieveQ(int num, int dex) {//return Q[num][dex]
             return (quality[num][dex]);
         }
     }
+    return -1;
 }
 
 double graph::RetrieveW(int num, int dex) {//return Q[num][dex]
@@ -1612,6 +1620,7 @@ double graph::RetrieveW(int num, int dex) {//return Q[num][dex]
             return (weights[num][dex]);
         }
     }
+    return -1.0;
 }
 
 //Simulation methods
@@ -1623,15 +1632,16 @@ double graph::RetrieveW(int num, int dex) {//return Q[num][dex]
  *
  *
  */
-void
-graph::SIR(int p0, int &max, int &len, int &ttl, double alpha) {//Sir Method
+void graph::SIR(int p0, int &max, int &len, int &ttl, double alpha,
+                vector<int> &prof) {
+    //Sir Method
 
     int NI;     //number of infected individuals
     int i, j, k;  //loop index variables
     int *nin;   //number of infected neighbors
 
     max = len = ttl = 0; //zero the reporting statistics
-    if ((V == 0) || (p0 > 0) || (p0 >= V))return; //no one was infected...
+    if ((V == 0) || (p0 < 0) || (p0 >= V))return; //no one was infected...
 
     nin = new int[V]; //create infected neioghbor counters
     setC2(0);    //set the population to susceptible
@@ -1669,10 +1679,201 @@ graph::SIR(int p0, int &max, int &len, int &ttl, double alpha) {//Sir Method
                     break;
             }
         len++; //record the time step
+        prof.push_back(NI);
     }
     delete[] nin;  //return storage for nin buffer
 }
 
+void graph::create_new_variant(bitset<dna_len> &orig, bitset<dna_len> &variant,
+                               vector<int> rv, int low_bnd, int up_bnd) {
+    // Randomness
+    unsigned seed = chrono::system_clock::now().time_since_epoch().count();
+    shuffle(rv.begin(), rv.end(), default_random_engine(seed));
+    int num_edits = (int) lrand48() % (up_bnd - low_bnd) + low_bnd;
+
+    // Copy
+    variant = orig;
+
+    // Random edits
+    for (int i = 0; i < num_edits; i++) {
+        variant.flip(rv.at(i));
+    }
+}
+
+struct sort_pred {
+  bool operator()(const std::pair<double, pair<int, bitset<dna_len>>> &left,
+                  const std::pair<double, pair<int, bitset<dna_len>>> &right) {
+      return left.first < right.first;
+  }
+};
+
+void graph::varInfected(bitset<dna_len> &immunity,
+                        vector<pair<int, bitset<dna_len>>> &strains,
+                        double alpha, int &str_id) {
+    int one_cnt;
+    int potent_ones;
+    int max_ones = 0;
+    int worst_str = 0;
+    immunity.flip();
+    vector<pair<double, pair<int, bitset<dna_len>>>> serv_strains;
+    // Find worst strain
+    for (auto &strain: strains) {
+        one_cnt = (int) strain.second.count();
+        bitset<dna_len> tmp = strain.second & immunity;
+        potent_ones = (int) tmp.count();
+        serv_strains.emplace_back((double) one_cnt / potent_ones, (strain));
+    }
+    immunity.flip();
+
+    sort(serv_strains.rbegin(), serv_strains.rend(), sort_pred());
+    for (auto &strain: serv_strains) {
+        if (infected(1, strain.first * alpha) == 1) {
+            str_id = strain.second.first;
+            return (void) "DONE";
+        }
+    }
+}
+
+//Sir w Variants
+void graph::varSIR(int p0, int &vcnt, vector<int> vprofs[],
+                   bitset<dna_len> variants[], int vorigs[],
+                   pair<int, int> vtimes[],
+                   double alpha, int lB, int uB, double var_prob) {
+    if ((V == 0) || (p0 < 0) || (p0 >= V))return;
+
+    int NI;     //number of infected individuals
+    int new_inf[max_vars];
+    bitset<dna_len> immunity[V];
+    int inf_with[V];
+    vector<int> randVec;
+    int day = 0;
+    vector<vector<int>> inf_neigh; // Nodes that are adjacent and can infect
+    // Strins adjacent to susceptible node
+    vector<pair<int, bitset<dna_len>>> strains;
+    int strain_id;
+
+    // Setup immunity and mde_var
+    for (int i = 0; i < V; ++i) {
+        inf_with[i] = -1;
+        immunity[i].reset();
+        variants[i].reset();
+    }
+
+    // Setup rand
+    randVec.reserve(dna_len);
+    for (int i = 0; i < dna_len; i++) {
+        randVec.push_back(i);
+    }
+    unsigned seed = chrono::system_clock::now().time_since_epoch().count();
+    shuffle(randVec.begin(), randVec.end(),
+            default_random_engine(seed));
+
+    // Make initial variant
+    for (int i = 0; i < init_bits; i++) {
+        variants[0].set(randVec.at(i));
+    }
+
+    for (int i = 0; i < max_vars; i++) {
+        vorigs[i] = -2;
+        vprofs[i] = (vector<int>) {};
+        vprofs[i].reserve(max_len);
+        vtimes[i].first = -1;
+        vtimes[i].second = -1;
+        new_inf[i] = 0;
+    }
+
+    vcnt = 0;
+    setC2(0); // All susceptible
+    clr[p0] = 1; // Patient zero infected
+    NI = 1;
+    inf_with[0] = 0;
+    day = 0;
+    vtimes[0].first = 0;
+    vprofs[0].push_back(1);
+    vorigs[0] = -1;
+    inf_neigh.reserve(V);
+    immunity[0] = variants[0];
+
+    while (NI > 0) { // While infected remain
+        // Clear infected neighbours
+        inf_neigh.clear();
+        day++;
+        for (int i = 0; i < V; i++) {
+            inf_neigh.push_back((vector<int>) {});
+        }
+
+        // Find infected neighbours
+        for (int inf = 0; inf < V; inf++) {
+            if (clr[inf] == 1) { // Found infected individual
+                for (int nei = 0; nei < nbr[inf].size(); nei++) {
+                    inf_neigh.at(nbr[inf].memz(nei)).push_back(inf);
+                }
+            }
+        }
+
+        // Determine infections
+        for (int node = 0; node < V; node++) {
+            // If infected neighbours
+            if (clr[node] == 0 && !inf_neigh.at(node).empty()) {
+                strains.clear();
+                for (int n: inf_neigh.at(node)) {
+                    strains.emplace_back(inf_with[n], variants[inf_with[n]]);
+                }
+
+                strain_id = -1;
+
+                varInfected(immunity[node], strains, alpha, strain_id);
+
+                // Infected and update immunity
+                if (strain_id != -1) { // Infected with inf_strain
+                    clr[node] = 2; // Marked infected
+                    new_inf[strain_id]++;
+                    // New variant?
+                    if (var_prob > 0 && drand48() < var_prob) { // Yes
+                        vcnt++;
+                        create_new_variant(variants[strain_id],
+                                           variants[vcnt],
+                                           randVec, lB, uB);
+                        new_inf[vcnt]++;
+                        inf_with[node] = vcnt;
+                        immunity[node] = immunity[node] | variants[vcnt];
+                        vorigs[vcnt] = strain_id;
+                        vtimes[vcnt].first = day;
+                    } else { // No
+                        inf_with[node] = strain_id;
+                    }
+                    immunity[node] = immunity[node] | variants[strain_id];
+                }
+
+            }
+        }
+
+        NI = 0;
+        for (int node = 0; node < V; node++) {
+            switch (clr[node]) {
+                case 0:
+                    break;
+                case 1:
+                    clr[node] = 0;
+                    inf_with[node] = -1;
+                    break;
+                case 2:
+                    clr[node] = 1;
+                    NI++;
+                    break;
+            }
+        }
+        for (int s = 0; s <= vcnt; s++) {
+            if (vtimes[s].second == -1) {
+                if (new_inf[s] == 0) { // End of variant
+                    vtimes[s].second = day;
+                }
+            }
+            vprofs[s].push_back(new_inf[s]);
+            new_inf[s] = 0;
+        }
+    }
+}
 
 //This is a modification of the SIR routine that adds profile - which
 //should be a double array with as many positions as the number of
@@ -1686,7 +1887,8 @@ void graph::SIRProfile(int p0, int &max, int &len, int &ttl, double alpha,
 
 
     max = len = ttl = 0; //zero the reporting statistics
-    if ((V == 0) || (p0 > 0) || (p0 >= V))return; //no one was infected...
+    if ((V == 0) || (p0 < 0) || (p0 >= V))
+        return; //no one was infected...
 
     for (i = 0; i < V; i++)prof[i] = 0;  //zero the profile array
 
@@ -1734,7 +1936,8 @@ void graph::SIRProfile(int p0, int &max, int &len, int &ttl, double alpha,
 }
 
 /* This routine duplicates SIR except that it assigns patient zero at random */
-void graph::SIRr(int &max, int &len, int &ttl, double alpha) {//Sir Method
+void
+graph::SIRr(int &max, int &len, int &ttl, double alpha) {//Sir Method
 
     int NI;     //number of infected individuals
     int i, j, k;  //loop index variables
@@ -1791,7 +1994,8 @@ void graph::SIRr(int &max, int &len, int &ttl, double alpha) {//Sir Method
 //if q is -1 then it is assigned the first time the routine is called
 //This routine returns the number of sick people
 //The status of patients are stored in the quality
-int graph::SIRupdate(int &q, double alpha, double advance) {//one time step
+int
+graph::SIRupdate(int &q, double alpha, double advance) {//one time step
 
     int i, j;        //loop indices
     int nsp;        //number of sick people
@@ -1803,7 +2007,8 @@ int graph::SIRupdate(int &q, double alpha, double advance) {//one time step
 
 
     if (q == -1) {//Allocate a quality
-        q = RQquality(0);  //request a quality and allocate it to susceptable
+        q =
+            RQquality(0);  //request a quality and allocate it to susceptable
         RecordQ(q, 0, 1);  //make the zeroth vertix patient zero
     }
 
@@ -1816,8 +2021,10 @@ int graph::SIRupdate(int &q, double alpha, double advance) {//one time step
                 nsn = 0;          //zero the sick neighbor counter
                 for (j = 0; j < deg; j++) {//loop over neighbors
                     nq = RetrieveQ(q,
-                                   nbrmod(i, j));   //get the neighbor's status
-                    if (nq == 1)nsn++;                //count the sick neighbor
+                                   nbrmod(i,
+                                          j));   //get the neighbor's status
+                    if (nq == 1)
+                        nsn++;                //count the sick neighbor
                 }//now we know the number of sick neighbors
                 if ((nsn > 0) && (infected(nsn, alpha))) {//new infected
                     scratch[i] = 1;  //note the infection
@@ -1836,7 +2043,10 @@ int graph::SIRupdate(int &q, double alpha, double advance) {//one time step
                 break;
         }
     }
-    for (i = 0; i < V; i++)RecordQ(q, i, scratch[i]);  //update the quality
+    for (i = 0; i < V; i++)
+        RecordQ(q,
+                i,
+                scratch[i]);  //update the quality
     return (nsp);                //return the number of sick people
 
 
@@ -1867,7 +2077,8 @@ int graph::SEIRupdate(int &q, double alpha,   //pairwise infection
 
 
     if (q == -1) {//Allocate a quality
-        q = RQquality(0);  //request a quality and allocate it to susceptable
+        q =
+            RQquality(0);  //request a quality and allocate it to susceptable
         RecordQ(q, 0, 1);  //make the zeroth vertix patient zero
     }
 
@@ -1880,7 +2091,8 @@ int graph::SEIRupdate(int &q, double alpha,   //pairwise infection
                 nsn = 0;          //zero the sick neighbor counter
                 for (j = 0; j < deg; j++) {//loop over neighbors
                     nq = RetrieveQ(q,
-                                   nbrmod(i, j));   //get the neighbor's status
+                                   nbrmod(i,
+                                          j));   //get the neighbor's status
                     if ((nq == 1) || (nq == 2))
                         nsn++;     //count the sick neighbors
                 }//now we know the number of sick neighbors
@@ -1914,7 +2126,10 @@ int graph::SEIRupdate(int &q, double alpha,   //pairwise infection
                 break;
         }
     }
-    for (i = 0; i < V; i++)RecordQ(q, i, scratch[i]);  //update the quality
+    for (i = 0; i < V; i++)
+        RecordQ(q,
+                i,
+                scratch[i]);  //update the quality
     return (nsp);                //return the number of sick people
 
 }
@@ -1949,7 +2164,8 @@ int graph::SEEpIRupdate(int &q, double alpha,   //pairwise infection
 
 
     if (q == -1) {//Allocate a quality
-        q = RQquality(0);  //request a quality and allocate it to susceptable
+        q =
+            RQquality(0);  //request a quality and allocate it to susceptable
         RecordQ(q, 0, 1);  //make the zeroth vertix patient zero
     }
 
@@ -1962,7 +2178,8 @@ int graph::SEEpIRupdate(int &q, double alpha,   //pairwise infection
                 nsn = 0;          //zero the sick neighbor counter
                 for (j = 0; j < deg; j++) {//loop over neighbors
                     nq = RetrieveQ(q,
-                                   nbrmod(i, j));   //get the neighbor's status
+                                   nbrmod(i,
+                                          j));   //get the neighbor's status
                     if ((nq == 2) || (nq == 3))
                         nsn++;     //count the sick neighbors
                 }//now we know the number of sick neighbors
@@ -1974,7 +2191,8 @@ int graph::SEEpIRupdate(int &q, double alpha,   //pairwise infection
             case 1: //Exposed
                 dart = drand48();
                 if (dart < infec) {//exposed transitioned to infected
-                    scratch[i] = 2;   //record infected status, moves to Ep
+                    scratch[i] =
+                        2;   //record infected status, moves to Ep
                     nsp++;          //increment number of sick people
                 } else {//stay exposed
                     scratch[i] = 1;   //record exposed status
@@ -1983,8 +2201,10 @@ int graph::SEEpIRupdate(int &q, double alpha,   //pairwise infection
                 break;
             case 2: //Exposed prime
                 dart = drand48();
-                if (dart < visible) {//exposed prime transitioned to infected
-                    scratch[i] = 3;   //record infected status, moves to Ep
+                if (dart
+                    < visible) {//exposed prime transitioned to infected
+                    scratch[i] =
+                        3;   //record infected status, moves to Ep
                     nsp++;          //increment number of sick people
                 } else {//stay exposed prime
                     scratch[i] = 2;   //record exposed status
@@ -2003,7 +2223,10 @@ int graph::SEEpIRupdate(int &q, double alpha,   //pairwise infection
                 break;
         }
     }
-    for (i = 0; i < V; i++)RecordQ(q, i, scratch[i]);  //update the quality
+    for (i = 0; i < V; i++)
+        RecordQ(q,
+                i,
+                scratch[i]);  //update the quality
     return (nsp);                              //return the number of sick people
 
 }
@@ -2030,7 +2253,8 @@ int graph::SEEIARupdate(int &q, double alpha,   //pairwise infection
 
 
     if (q == -1) {//Allocate a quality
-        q = RQquality(0);  //request a quality and allocate it to susceptable
+        q =
+            RQquality(0);  //request a quality and allocate it to susceptable
         RecordQ(q, 0, 1);  //make the zeroth vertix patient zero
     }
 
@@ -2043,7 +2267,8 @@ int graph::SEEIARupdate(int &q, double alpha,   //pairwise infection
                 nsn = 0;          //zero the sick neighbor counter
                 for (j = 0; j < deg; j++) {//loop over neighbors
                     nq = RetrieveQ(q,
-                                   nbrmod(i, j));   //get the neighbor's status
+                                   nbrmod(i,
+                                          j));   //get the neighbor's status
                     if ((nq != 0) && (nq != 5))
                         nsn++;     //count the sick neighbors
                 }//now we know the number of sick neighbors
@@ -2055,7 +2280,8 @@ int graph::SEEIARupdate(int &q, double alpha,   //pairwise infection
             case 1: //Exposed
                 dart = drand48();
                 if (dart < infec) {//exposed transitioned to infected
-                    scratch[i] = 2;   //record infected status, moves to Ep
+                    scratch[i] =
+                        2;   //record infected status, moves to Ep
                     nsp++;          //increment number of sick people
                 } else {//stay exposed
                     scratch[i] = 1;   //record exposed status
@@ -2064,11 +2290,14 @@ int graph::SEEIARupdate(int &q, double alpha,   //pairwise infection
                 break;
             case 2: //Exposed prime
                 dart = drand48();
-                if (dart < infecP) {//exposed prime transitioned to infected
-                    scratch[i] = 3;   //record infected status, moves to Ep
+                if (dart
+                    < infecP) {//exposed prime transitioned to infected
+                    scratch[i] =
+                        3;   //record infected status, moves to Ep
                     nsp++;          //increment number of sick people
                 } else if (dart
-                    < infecP + cksee) {//Exposed prime transition to long term A
+                    < infecP
+                        + cksee) {//Exposed prime transition to long term A
                     scratch[i] = 4;
                     nsp++;
                 } else {//stay exposed prime
@@ -2100,7 +2329,10 @@ int graph::SEEIARupdate(int &q, double alpha,   //pairwise infection
 
         }
     }
-    for (i = 0; i < V; i++)RecordQ(q, i, scratch[i]);  //update the quality
+    for (i = 0; i < V; i++)
+        RecordQ(q,
+                i,
+                scratch[i]);  //update the quality
     return (nsp);                              //return the number of sick people
 }
 
@@ -2117,11 +2349,14 @@ int graph::attack(double *pr) {//probabalistic attack method
     double ttl;  //total of probability vector
     int fl;      //stop flag
 
-    if (clr == 0)clr = new int[M];  //if the color buffer doesn't exist, create
-    for (i = 0; i < V; i++)clr[i] = 0;   //color zero is ``vertex alive''
+    if (clr == 0)
+        clr = new int[M];  //if the color buffer doesn't exist, create
+    for (i = 0; i < V; i++)
+        clr[i] = 0;   //color zero is ``vertex alive''
     q = new int[V];  //create distance array
     ttl = 0;
-    for (i = 0; i < V; i++)ttl += pr[i];  //create total probability mass
+    for (i = 0; i < V; i++)
+        ttl += pr[i];  //create total probability mass
     rv = 0; //initialize the return value
     fl = 0; //reset disconnection flag
     do {//knock out vertices
@@ -2158,12 +2393,14 @@ void graph::Ant(int reps, int *cnt) {
 //color methods
 void graph::setC2(int vl) {//set colors to vl
 
-    if (clr == 0)clr = new int[M];  //if the color buffer doesn't exist, create
+    if (clr == 0)
+        clr = new int[M];  //if the color buffer doesn't exist, create
     for (int i = 0; i < V; i++)clr[i] = vl; //set the value
 
 }
 
-void graph::GDC(int *ord) {//run the greedy coloring algorithm with order ord
+void
+graph::GDC(int *ord) {//run the greedy coloring algorithm with order ord
 
     int i, j, k, m;
     static int F[50];
@@ -2181,7 +2418,8 @@ void graph::GDC(int *ord) {//run the greedy coloring algorithm with order ord
     }
 }
 
-int graph::AUC(double *gn, int tg) {//run Austrailian coloring with target tg
+int graph::AUC(double *gn,
+               int tg) {//run Austrailian coloring with target tg
 
     int *used, *aval;  //used and available colors
     int i, j, k;        //loop idex variables
@@ -2214,9 +2452,11 @@ int graph::AUC(double *gn, int tg) {//run Austrailian coloring with target tg
 
 
 //genetics
-int graph::FPN(int v, double *ft) {//fitness perprotional neighbor selection
+int
+graph::FPN(int v, double *ft) {//fitness perprotional neighbor selection
 
-    if ((v >= V) || (v < 0))return (0);  //return zero for stupid request
+    if ((v >= V) || (v < 0))
+        return (0);  //return zero for stupid request
     return (nbr[v].FPS(ft));      //call the set fitness proportional selection
 }
 
@@ -2254,7 +2494,8 @@ void graph::read(istream &inp) {//read the graph
     }
     //Need to add code to read qualities and weights
 }
-void graph::readadj(istream &inp, int numV) {//read a python adjacency graph
+void
+graph::readadj(istream &inp, int numV) {//read a python adjacency graph
 
     char buf[1000];
     int source, target;
@@ -2310,7 +2551,8 @@ void graph::dotout(ostream &aus) {//write the dot format
 }
 
 void
-graph::adjout(ostream &aus, char sep) {//write the adjacency list with seperator
+graph::adjout(ostream &aus,
+              char sep) {//write the adjacency list with seperator
 
     if (V == 0)return;
     for (int i = 0; i < V; i++) {//loop over vertices
@@ -2336,4 +2578,5 @@ graph::writeadj(ostream &aus) {//write the graph as a python adjacency graph
     }
 
 }
+
 
