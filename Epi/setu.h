@@ -15,6 +15,7 @@ using namespace std;
 #define dna_len (int)128
 #define init_bits (int)32
 // TODO: Update below?
+// Comment
 #define max_vars (int)32
 #define max_len (int)80
 

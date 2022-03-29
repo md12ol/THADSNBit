@@ -310,7 +310,6 @@ void initalg(const char *pLoc) {//initialize the algorithm
     }
 }
 
-//TODO: update?
 bool necroticFilter(const int *upTri) {
     int len = Qz - 2;
     int count[2] = {0, 0};

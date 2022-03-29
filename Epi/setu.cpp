@@ -1837,7 +1837,6 @@ void graph::varSIR(int p0, int &vcnt, vector<int> vprofs[], bitset<dna_len> vari
                     }
                     immunity[node] = immunity[node] | variants[strain_id];
                 }
-
             }
         }
 
