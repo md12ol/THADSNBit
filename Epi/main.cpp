@@ -20,7 +20,7 @@ using namespace std;
 
 /*************************algorithm controls******************************/
 #define PL 16
-#define NSE 25
+#define NSE 30
 #define alpha 0.5
 #define mepl 3              //  Minimum epidemic length
 #define rse 5               //  Re-try short epidemics
@@ -42,7 +42,7 @@ using namespace std;
 #define Qz verts*(verts-1)/2 + 2
 int Q[Qz];
 
-#define ent_thres 1.0
+//#define ent_thres 1.0
 bool dead[popsize];
 double max_fit = verts;
 double min_fit = 0.0;
@@ -60,9 +60,11 @@ bool mde_spread;
 int fitFun;
 // Variants
 int var_count;
-pair<int, int> best_varL[max_vars];
-vector<int> best_varP[max_vars];
-int best_varC;
+pair<int, int> bestEpi_varLens[max_vars];
+vector<int> bestEpi_varProfs[max_vars];
+int bestEpi_varCount;
+int bestEpi_varParents[max_vars];
+bitset<dna_len> bestEpi_varDNA[max_vars];
 double var_prob;
 int edit_lowB;
 int edit_upB;
@@ -84,7 +86,7 @@ void createUpTri(bitspray &A, int *upTri);
 int main(int argc, char *argv[]) {
     /**
      * Output Root, modeV, vProb, editLow, editUp, modeS, modeP
-     * nohup ./THADSNBit "./Output/" 1 0.01 4 12 0 0 &
+     * nohup ./THADSNBit "./Output/" 1 ? ? ? 0 0 &
      */
 
     fstream stat, best, dchar, readme, iGOut;   //statistics, best structures
@@ -105,18 +107,18 @@ int main(int argc, char *argv[]) {
     mde_prof = (int) strtol(argv[7], nullptr, 10) == 1;
 
     if (!mde_var) {
-        if (mde_prof) { // Profile matching without mde_var
+        if (mde_prof) { // Profile matching without variants
             fitFun = 1;
         } else if (mde_spread) {
-            fitFun = 2; // Epidemic mde_spread with mde_var
+            fitFun = 2; // Epidemic mde_spread without variants
         } else {
-            fitFun = 0; // Epidemic length without mde_var
+            fitFun = 0; // Epidemic length without variants
         }
     } else {
         if (mde_spread) {
-            fitFun = 2; // Epidemic mde_spread with mde_var
+            fitFun = 2; // Epidemic mde_spread with variants
         } else {
-            fitFun = 0; // Epidemic length with mde_var
+            fitFun = 0; // Epidemic length with variants
         }
     }
 
@@ -132,11 +134,11 @@ int main(int argc, char *argv[]) {
                 outRoot, pNum, states, popsize, MNM);
     } else if (mde_var) {
         if (mde_spread) {
-            sprintf(outLoc, "%sOutput - ES %.4fP and %02d to %02dE/",
-                    outRoot, var_prob, edit_lowB, edit_upB);
+            sprintf(outLoc, "%sOutput - ES %03dP, %02dI, %.4f%%, %02d-%02dE/",
+                    outRoot, popsize, init_bits, var_prob, edit_lowB, edit_upB);
         } else {
-            sprintf(outLoc, "%sOutput - EL %.4fP and %02d to %02dE/",
-                    outRoot, var_prob, edit_lowB, edit_upB);
+            sprintf(outLoc, "%sOutput - EL %03dP, %02dI, %.4f%%, %02d-%02dE/",
+                    outRoot, popsize, init_bits, var_prob, edit_lowB, edit_upB);
         }
     } else {
         if (mde_spread) {
@@ -364,10 +366,10 @@ double fitness(int *upTri, int idx, bool final) {//compute the fitness
     int best_epi = 0;
     vector<int> varBaseProf;
     var_count = 0;
+    int var_parents[max_vars];
     pair<int, int> var_lens[max_vars];
     vector<int> var_profs[max_vars];
     bitset<dna_len> variants[verts];
-    int var_parents[max_vars];
     vector<double> v_lengths;
     v_lengths.clear();
     v_lengths.reserve(NSE);
@@ -398,18 +400,22 @@ double fitness(int *upTri, int idx, bool final) {//compute the fitness
                 if (!mde_var) {
                     if (len > best_epi) {
                         best_epi = len;
-                        best_varC = 0;
-                        best_varL[0].first = 0;
-                        best_varL[0].second = len;
-                        best_varP[0] = varBaseProf;
+                        bestEpi_varCount = 0;
+                        bestEpi_varLens[0].first = 0;
+                        bestEpi_varLens[0].second = len;
+                        bestEpi_varProfs[0] = varBaseProf;
+                        bestEpi_varParents[0] = -1;
+                        bestEpi_varDNA[0] = NULL;
                     }
                 } else {
                     if (len > best_epi) {
                         best_epi = len;
-                        for (int i = 0; i < max_vars; i++) {
-                            best_varC = var_count;
-                            best_varL[i] = var_lens[i];
-                            best_varP[i] = var_profs[i];
+                        for (int i = 0; i <= var_count; i++) {
+                            bestEpi_varCount = var_count;
+                            bestEpi_varLens[i] = var_lens[i];
+                            bestEpi_varProfs[i] = var_profs[i];
+                            bestEpi_varParents[i] = var_parents[i];
+                            bestEpi_varDNA[i] = variants[i];
                         }
                     }
                 }
@@ -471,18 +477,22 @@ double fitness(int *upTri, int idx, bool final) {//compute the fitness
                 if (!mde_var) {
                     if (ttl > best_epi) {
                         best_epi = ttl;
-                        best_varC = 0;
-                        best_varL[0].first = 0;
-                        best_varL[0].second = len;
-                        best_varP[0] = varBaseProf;
+                        bestEpi_varCount = 0;
+                        bestEpi_varLens[0].first = 0;
+                        bestEpi_varLens[0].second = len;
+                        bestEpi_varProfs[0] = varBaseProf;
+                        bestEpi_varParents[0] = -1;
+                        bestEpi_varDNA[0] = NULL;
                     }
                 } else {
                     if (ttl > best_epi) {
                         best_epi = ttl;
                         for (int i = 0; i < max_vars; i++) {
-                            best_varC = var_count;
-                            best_varL[i] = var_lens[i];
-                            best_varP[i] = var_profs[i];
+                            bestEpi_varCount = var_count;
+                            bestEpi_varLens[i] = var_lens[i];
+                            bestEpi_varProfs[i] = var_profs[i];
+                            bestEpi_varParents[i] = var_parents[i];
+                            bestEpi_varDNA[i] = variants[i];
                         }
                     }
                 }
@@ -561,16 +571,16 @@ void initpop() {//initialize population
     }
     if (fitFun == 0 || fitFun == 2) {
         min_fit = fit[0];
-        for (int i = 0; i < popsize; i++) {
-            if (fit[i] < min_fit) {
-                min_fit = fit[i];
+        for (double i: fit) {
+            if (i < min_fit) {
+                min_fit = i;
             }
         }
     } else {
         max_fit = fit[0];
-        for (int i = 0; i < popsize; i++) {
-            if (fit[i] > max_fit) {
-                max_fit = fit[i];
+        for (double i: fit) {
+            if (i > max_fit) {
+                max_fit = i;
             }
         }
     }
@@ -735,25 +745,34 @@ void reportbest(ostream &aus, ostream &difc) {//report the best graph
     aus << fit[b] << " -fitness" << endl;
 
     fitness(b, *bPop[b], true);
+    aus << "Epidemic Profile" << endl;
     if (mde_var) {
-        for (int i = 0; i <= best_varC; i++) {
-            aus << "V" << i << " ";
-            aus << "[" << left << setw(2) << best_varL[i].first << " ";
-            aus << left << setw(2) << best_varL[i].second << "]: ";
-            for (int j = 0; j < best_varL[i].first; j++) {
-                aus << "   ";
+        for (int i = 0; i <= bestEpi_varCount; i++) {
+            if (i == 0) {
+                aus << "NA-->" << "V" << left << setw(2) << i << "\t";
+            } else {
+                aus << "V" << left << setw(2) << bestEpi_varParents[i] << "->V" << left << setw(2) << i << "\t";
             }
-            for (int j = 0; j <= best_varL[i].second - best_varL[i].first; j++) {
-                aus << left << setw(3) << best_varP[i].at(j);
+            aus << "[" << left << setw(3) << bestEpi_varLens[i].first << "-";
+            aus << left << setw(3) << bestEpi_varLens[i].second << "]:\t";
+            for (int j = 0; j < bestEpi_varLens[i].first; j++) {
+                aus << "\t";
+            }
+            for (int j = 0; j <= bestEpi_varLens[i].second - bestEpi_varLens[i].first; j++) {
+                aus << bestEpi_varProfs[i].at(j) << "\t";
             }
             aus << endl;
         }
+        for (int i = 0; i <= bestEpi_varCount; i++) {
+            aus << "V" << i << "\t";
+            aus << bestEpi_varDNA[i] << endl;
+        }
     } else {
-        aus << "V0" << " ";
-        aus << "[" << left << setw(2) << best_varL[0].first << " ";
-        aus << best_varL[0].second << "]: ";
-        for (int j = 0; j <= best_varL[0].second - best_varL[0].first; j++) {
-            aus << left << setw(3) << best_varP[0].at(j) << " ";
+        aus << left << setw(4) << "V0" << " ";
+        aus << "[" << left << setw(2) << bestEpi_varLens[0].first << " ";
+        aus << bestEpi_varLens[0].second << "]: ";
+        for (int j = 0; j <= bestEpi_varLens[0].second - bestEpi_varLens[0].first; j++) {
+            aus << bestEpi_varProfs[0].at(j) << " ";
         }
         aus << endl;
     }
@@ -791,7 +810,7 @@ void reportbest(ostream &aus, ostream &difc) {//report the best graph
     }
 
     //Now sort the entropy vector
-    bool more = false;  //no swaps
+    bool more;  //no swaps
     do {//swap out-of-order entries
         more = false;
         for (int i = 0; i < G.size() - 1; i++) {

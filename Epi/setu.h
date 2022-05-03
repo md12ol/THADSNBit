@@ -16,8 +16,8 @@ using namespace std;
 #define init_bits (int)32
 // TODO: Update below?
 // Comment
-#define max_vars (int)32
-#define max_len (int)80
+#define max_vars (int)64
+#define max_len (int)128
 
 //fitness proportional selector used in simulations
 int rselect(double *v, double ttl, int N);

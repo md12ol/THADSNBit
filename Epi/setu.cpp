@@ -314,7 +314,7 @@ void set::writememb(ostream &aus) { //write members on one line
     }
 
     aus << mem[0];
-    for (int i = 1; i < n; i++)aus << " " << mem[i];
+    for (int i = 1; i < n; i++)aus << "\t" << mem[i];
     aus << endl;
 
 }
@@ -1792,6 +1792,9 @@ void graph::varSIR(int p0, int &vcnt, vector<int> vprofs[], bitset<dna_len> vari
         // Clear infected neighbours
         inf_neigh.clear();
         day++;
+        if (day == max_len) {
+            cout << "ERROR: Epidemic Length exceeds Maximum Epidemic Length" << endl;
+        }
         for (int i = 0; i < V; i++) {
             inf_neigh.push_back((vector<int>) {});
         }
@@ -1824,6 +1827,9 @@ void graph::varSIR(int p0, int &vcnt, vector<int> vprofs[], bitset<dna_len> vari
                     // New variant?
                     if (var_prob > 0 && drand48() < var_prob) { // Yes
                         vcnt++;
+                        if (vcnt == max_vars) {
+                            cout << "ERROR: Variant Count exceeds Maximum Variants" << endl;
+                        }
                         create_new_variant(variants[strain_id],
                                            variants[vcnt],
                                            randVec, lB, uB);
@@ -2457,7 +2463,7 @@ void graph::write(ostream &aus) {//write the graph
 
     int i;
 
-    aus << M << " " << V << " " << E << endl;
+    aus << M << "\t" << V << "\t" << E << endl;
     for (i = 0; i < V; i++) {
         nbr[i].writememb(aus);
     }
