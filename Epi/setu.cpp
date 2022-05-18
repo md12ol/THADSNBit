@@ -1718,7 +1718,7 @@ void graph::varInfected(bitset<dna_len> &immunity, vector<pair<int, bitset<dna_l
         one_cnt = (int) strain.second.count();
         bitset<dna_len> tmp = strain.second & immunity;
         potent_ones = (int) tmp.count();
-        serv_strains.emplace_back((double) one_cnt / potent_ones, (strain));
+        serv_strains.emplace_back((double) potent_ones / one_cnt, (strain));
     }
     immunity.flip();
 
