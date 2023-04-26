@@ -75,11 +75,17 @@ void initpop();                           //initialize population
 void matingevent();                       //run a mating event
 void report(ostream &aus);                //make a statistical report
 void reportbest(ostream &aus, ostream &difc);
+
 void createReadMe(ostream &aus);
+
 void cmdLineIntro(ostream &aus);
+
 void cmdLineRun(int run, ostream &aus);
+
 double fitness(int *upTri, int idx, bool final);
+
 double fitness(int idx, bitspray &A, bool final);
+
 void createUpTri(bitspray &A, int *upTri);
 
 /****************************Main Routine*******************************/
@@ -530,6 +536,10 @@ void createUpTri(bitspray &A, int *upTri) {//unpack the queue
     for (int i = 0; i < Qz - 2; i++) {
         upTri[i] = Q[i];
     }
+//    for (int i: Q) {
+//        cout << i << '\t';
+//    }
+//    cout << endl;
 }
 
 double fitness(int idx, bitspray &A, bool final) {

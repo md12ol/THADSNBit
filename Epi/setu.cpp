@@ -1891,7 +1891,7 @@ void graph::SIRProfile(int p0, int &max, int &len, int &ttl, double alpha,
     for (i = 0; i < V; i++)prof[i] = 0;  //zero the profile array
 
     nin = new int[V]; //create infected neioghbor counters
-    setC2(0);       //set the population to infected
+    setC2(0);      //set the population to infected
     clr[p0] = 1;      //infect patient zero
     NI = 1;           //initialize to one person currently infected
     len = 0;          //initialize length variable
