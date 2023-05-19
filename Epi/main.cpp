@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <bitset>
 #include <numeric>
+#include <algorithm>
 
 using namespace std;
 
